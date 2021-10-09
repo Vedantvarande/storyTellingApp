@@ -10,11 +10,10 @@ import {
 } from "react-native";
 import { RFValue } from "react-native-responsive-fontsize";
 import StoryCard from "./StoryCard";
-
 import AppLoading from "expo-app-loading";
 import * as Font from "expo-font";
 import { FlatList } from "react-native-gesture-handler";
-
+import firebase from "firebase";
 let customFonts = {
   "Bubblegum-Sans": require("../assets/fonts/BubblegumSans-Regular.ttf")
 };
@@ -25,7 +24,9 @@ export default class Feed extends Component {
   constructor(props) {
     super(props);
     this.state = {
-      fontsLoaded: false
+      fontsLoaded: false,
+      light_theme:true,
+      stories:[]
     };
   }
 
@@ -36,10 +37,45 @@ export default class Feed extends Component {
 
   componentDidMount() {
     this._loadFontsAsync();
+    this.fetchUser();
+    this.fetchStories();
   }
-
+  fetchStories = () => {
+    firebase
+      .database()
+      .ref("/posts/")
+      .on(
+        "value",
+        snapshot => {
+          let stories = [];
+          if (snapshot.val()) {
+            Object.keys(snapshot.val()).forEach(function (key) {
+              stories.push({
+                key: key,
+                value: snapshot.val()[key]
+              });
+            });
+          }
+          this.setState({ stories: stories });
+          this.props.setUpdateToFalse();
+        },
+        function (errorObject) {
+          console.log("The read failed: " + errorObject.code);
+        }
+      );
+  };
+  fetchUser = () => {
+    let theme;
+    firebase
+      .database()
+      .ref("/users/" + firebase.auth().currentUser.uid)
+      .on("value", snapshot => {
+        theme = snapshot.val().current_theme;
+        this.setState({ light_theme: theme === "light" });
+      });
+  };
   renderItem = ({ item: story }) => {
-    return <StoryCard story={story} />;
+    return <StoryCard story={story} navigation={this.props.navigation} />;
   };
 
   keyExtractor = (item, index) => index.toString();
@@ -49,7 +85,7 @@ export default class Feed extends Component {
       return <AppLoading />;
     } else {
       return (
-        <View style={styles.container}>
+        <View style={ this.state.light_theme ? styles.containerLight : styles.container}>
           <SafeAreaView style={styles.droidSafeArea} />
           <View style={styles.appTitle}>
             <View style={styles.appIcon}>
@@ -59,16 +95,31 @@ export default class Feed extends Component {
               ></Image>
             </View>
             <View style={styles.appTitleTextContainer}>
-              <Text style={styles.appTitleText}>Storytelling App</Text>
+              <Text style={this.state.light_them ? styles.appTitleTextLight: styles.appTitleText}>Storytelling App</Text>
             </View>
           </View>
-          <View style={styles.cardContainer}>
-            <FlatList
-              keyExtractor={this.keyExtractor}
-              data={stories}
-              renderItem={this.renderItem}
-            />
-          </View>
+          {!this.state.stories[0] ? (
+            <View style={styles.noStories}>
+              <Text
+                style={
+                  this.state.light_theme
+                    ? styles.noStoriesTextLight
+                    : styles.noStoriesText
+                }
+              >
+                No Stories Available
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.cardContainer}>
+              <FlatList
+                keyExtractor={this.keyExtractor}
+                data={this.state.stories}
+                renderItem={this.renderItem}
+              />
+            </View>
+          )}
+          <View style={{ flex: 0.08 }} />
         </View>
       );
     }
@@ -79,6 +130,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#15193c"
+  },
+  containerLight: {
+    flex: 1,
+    backgroundColor: "#fff"
   },
   droidSafeArea: {
     marginTop: Platform.OS === "android" ? StatusBar.currentHeight : RFValue(35)
@@ -106,7 +161,27 @@ const styles = StyleSheet.create({
     fontSize: RFValue(28),
     fontFamily: "Bubblegum-Sans"
   },
+  appTitleTextLight: {
+    color: "black",
+    fontSize: RFValue(28),
+    fontFamily: "Bubblegum-Sans"
+  },
   cardContainer: {
     flex: 0.93
+  },
+  noStories: {
+    flex: 0.85,
+    justifyContent: "center",
+    alignItems: "center"
+  },
+  noStoriesTextLight: {
+    color: "black",
+    fontSize: RFValue(40),
+    fontFamily: "Bubblegum-Sans"
+  },
+  noStoriesText: {
+    color: "white",
+    fontSize: RFValue(40),
+    fontFamily: "Bubblegum-Sans"
   }
 });
